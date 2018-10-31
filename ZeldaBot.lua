@@ -1,4 +1,5 @@
 up = true
+pressed = false
 
 function get_health(normalized)
     hearts = memory.readbyte(tonumber("0x66F"))
@@ -37,6 +38,10 @@ while true do
     -- print(get_health())
     dead = get_health() == 0
 
+    if dead then
+        pressed = not pressed
+    end
+
     if yPos < 100 and up then
         up = false
     end
@@ -44,7 +49,7 @@ while true do
         up = true
     end
 
-    my_input = {up=up, down=not up, start=dead}
+    my_input = {up=up, down=not up, start=pressed}
     print(my_input)
     joypad.write(1, my_input)
 
