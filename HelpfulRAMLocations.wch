@@ -1,0 +1,6 @@
+
+4
+00000	0070	b	h	0	Link's X
+00001	0084	b	h	0	Link's Y
+00002	066F	b	h	0	Heart Containers
+00003	0670	b	h	0	Partial Heart
