@@ -71,9 +71,8 @@ while not dead do
     if dead then
       --  pressed = not pressed
         file = io.open("searchstring.txt", "w")
-        io.output(file)
-        io.write(total_string)
-        io.close(file)
+        file:write(total_string)
+        file:close()
     end
 
     curr = string.sub(search_string, frame_index, frame_index)
