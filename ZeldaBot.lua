@@ -15,7 +15,7 @@ frame_index = 0
     e = select
 ]]
 search_string = ""
-
+total_string = ""
 function get_health(normalized)
     hearts = memory.readbyte(tonumber("0x66F"))
     partial = memory.readbyte(tonumber("0x670"))
@@ -46,12 +46,13 @@ end
 
 function generate_random_string(length)
     search_string = ""
-    valid_options = "abudlrse"
+    valid_options = "abudlrs"
     for i=1,length do
         r_index = math.random(1, string.len(valid_options))
         search_string = search_string .. string.rep(string.sub(valid_options, r_index, r_index), math.random(1, 50))
     end
     print(search_string)
+    total_string = total_string .. search_string
 end
 
 generate_random_string(100)
@@ -67,9 +68,13 @@ while not dead do
     
     dead = get_health() == 0
 
-    -- if dead then
-    --    pressed = not pressed
-    -- end
+    if dead then
+      --  pressed = not pressed
+        file = io.open("searchstring.txt", "w")
+        io.output(file)
+        io.write(total_string)
+        io.close(file)
+    end
 
     curr = string.sub(search_string, frame_index, frame_index)
     gui.text(0, 20, "Selected Button: " .. curr)
