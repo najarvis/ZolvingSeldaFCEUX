@@ -1,5 +1,6 @@
 up = true
 pressed = false
+dead = false
 
 frame_index = 0
 --[[
@@ -55,7 +56,7 @@ end
 
 generate_random_string(100)
 
-while true do
+while not dead do
 
     -- Print input from player 1
 
@@ -66,9 +67,9 @@ while true do
     
     dead = get_health() == 0
 
-    if dead then
-        pressed = not pressed
-    end
+    -- if dead then
+    --    pressed = not pressed
+    -- end
 
     curr = string.sub(search_string, frame_index, frame_index)
     gui.text(0, 20, "Selected Button: " .. curr)
