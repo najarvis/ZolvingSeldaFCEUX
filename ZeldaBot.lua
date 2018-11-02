@@ -46,7 +46,7 @@ end
 
 function generate_random_string(length)
     search_string = ""
-    valid_options = "abudlr"
+    valid_options = "abudlrse"
     for i=1,length do
         r_index = math.random(1, string.len(valid_options))
         search_string = search_string .. string.rep(string.sub(valid_options, r_index, r_index), math.random(1, 50))
