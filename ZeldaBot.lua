@@ -1,8 +1,5 @@
-up = true
-pressed = false
 dead = false
-
-frame_index = 0
+math.randomseed(os.time())
 --[[
     Possible values in the search string
     a = a button
@@ -14,8 +11,193 @@ frame_index = 0
     s = start
     e = select
 ]]
-search_string = ""
-total_string = ""
+
+local matrix = require('lua-matrix.lua.matrix')
+
+num_inputs = 20
+num_hidden = 50
+num_outputs = 8 -- Up, Down, Left, Right, A, B, Select, Start
+weights1_shape = matrix(num_inputs, num_hidden)
+weights2_shape = matrix(num_hidden, num_outputs)
+layer1 = matrix(1, num_hidden)
+weights1 = matrix.my_random(weights1_shape, 100)
+weights2 = matrix.my_random(weights2_shape, 100)
+t = 0
+
+-- Starting states:
+bombState = 0
+rupeeState = 0
+swordState = 0
+candleState = 0
+bowState = false
+arrowState = false
+ladderState = false
+powerBraceletState = false
+raftState = false
+whistleState = false
+magicalRodState = false
+magicBookState = false
+boomerangState = false
+clockState = false
+foodState = false
+killedEnemies = 0
+
+triforcePieces = 0
+move = 0
+moveHistory = {}
+screenHistory = {}
+curHealth = 0
+
+function calculateFitness()
+    sword = memory.readbyte(tonumber("0x0657"))
+    bombs = memory.readbyte(tonumber("0x0658"))
+    arrow = memory.readbyte(tonumber("0x0659"))
+    bow = memory.readbyte(tonumber("0x065A"))
+    candle = memory.readbyte(tonumber("0x065B"))
+    whistle = memory.readbyte(tonumber("0x065C"))
+    food = memory.readbyte(tonumber("0x065D"))
+    magicalRod = memory.readbyte(tonumber("0x065F"))
+    raft = memory.readbyte(tonumber("0x0660"))
+    magicBook = memory.readbyte(tonumber("0x0661"))
+    ladder = memory.readbyte(tonumber("0x0663"))
+    powerBracelet = memory.readbyte(tonumber("0x0665"))
+    clock = memory.readbyte(tonumber("0x066C"))
+    rupees = memory.readbyte(tonumber("0x066D"))
+    health = get_health()
+    triforce = memory.readbyte(tonumber("0x0671"))
+    boomerang = memory.readbyte(tonumber("0x0674"))
+    xPos = memory.readbyte(tonumber("0x70"))
+    yPos = memory.readbyte(tonumber("0x84"))
+    
+    killed = memory.readbyte(tonumber("0x0627"))
+
+    posFound = false
+    index = 1
+    fitness = 0
+
+    while not posFound and index <= #moveHistory do
+        if moveHistory[index][1] == xPos and moveHistory[index][2] == yPos then
+            posFound = true
+        end
+        index = index + 1
+    end
+    if posFound then
+        fitness = fitness - 1
+    else 
+        fitness = fitness + 2
+        move = move + 1
+        if move > 200 then
+            move = 1
+        end
+        moveHistory[move] = {xPos, yPos}
+    end
+
+    lastMove = {xPos, yPos}
+    if health < curHealth then
+        fitness = fitness - 50
+    end
+    curHealth = health
+
+    if sword == 1 and swordState <= 0 then
+        swordState = 1
+        fitness = fitness + 1000
+    elseif sword == 2 and swordState <= 1 then
+        swordState = 2
+        fitness = fitness + 500
+    elseif sword == 3 and swordState <= 2 then
+        swordState = 3
+        fitness = fitness + 500
+    end
+
+    if bombs > bombState then
+        fitness = fitness + 20
+    end
+    bombState = bombs
+
+    if arrow == 1 and arrowState <= 0 then
+        arrowState = 1
+        fitness = fitness + 150
+    elseif arrow == 2 and arrowState <= 1 then
+        arrowState = 2
+        fitness = fitness + 150
+    end
+
+    if bow == 01 and not bowState then
+        bowState = true
+        fitness = fitness + 500
+    end
+
+    if candle == 1 and candleState <= 0 then
+        candleState = 1
+        fitness = fitness + 500
+    elseif candle == 2 and candleState <= 1 then
+        candleState = 2
+        fitness = fitness + 250
+    end
+
+    if whistle == 1 and not whistleState then
+        whistleState = true
+        fitness = fitness + 500
+    end
+
+    if food == 1 and not foodState then
+        foodState = true
+        fitness = fitness + 250
+    end
+
+    if magicalRod == 1 and not magicalRodState then
+        magicalRodState = true
+        fitness = fitness + 500
+    end
+
+    if raft == 1 and not raftState then
+        raftState = true
+        fitness = fitness + 500
+    end
+
+    if magicBook == 1 and not magicBookState then
+        magicBookState = true
+        fitness = fitness + 500
+    end
+
+    if ladder == 1 and not ladderState then
+        ladderState = false
+        fitness = fitness + 500
+    end
+
+    if powerBracelet == 1 and not powerBraceletState then
+        powerBraceletState = true
+        fitness = fitness + 500
+    end
+
+    if clock == 1 and not clockState then
+        clockState = true
+        fitness = fitness + 250
+    end
+
+    if rupees > rupeeState then
+        fitness = fitness + 20
+    end
+    rupeeState = rupees
+    if triforce > triforcePieces then
+        fitness = fitness + 5000
+    end
+    triforcePieces = triforce
+
+    if boomerang == 1 and not boomerangState then
+        boomerangState = true
+        fitness = fitness + 500
+    end
+
+    if killed > killedEnemies then 
+        fitness = fitness + 100
+    end
+    killedEnemies = killed
+
+    return fitness
+
+end
+
 function get_health(normalized)
     hearts = memory.readbyte(tonumber("0x66F"))
     partial = memory.readbyte(tonumber("0x670"))
@@ -34,70 +216,202 @@ function get_health(normalized)
 
     total_health = filled_hearts + partial_filled
 
-    normalized_health = total_health / num_heart_containers
-
     -- If normalized isn't specified it is passed in as 'nil', which evaluates to false
     if normalized then
-        return normalized_health
+        return total_health / num_heart_containers
     else
         return total_health
     end
 end
 
-function generate_random_string(length)
-    search_string = ""
-    valid_options = "abudlrs"
-    for i=1,length do
-        r_index = math.random(1, string.len(valid_options))
-        search_string = search_string .. string.rep(string.sub(valid_options, r_index, r_index), math.random(1, 50))
-    end
-    print(search_string)
-    total_string = total_string .. search_string
+function generate_inputs()
+    has_sword = memory.readbyte(tonumber("0x0657"))
+    xPos = memory.readbyte(tonumber("0x70")) / 256.0
+    yPos = memory.readbyte(tonumber("0x84")) / 256.0
+    map_x = (memory.readbyte(tonumber("0xEB")) % tonumber("0x10")) / 8
+    map_y = math.floor(memory.readbyte(tonumber("0xEB")) / tonumber("0x10")) / 8
+    health = get_health(true)
+    enemy1X = memory.readbyte(tonumber("0x71")) / 256.0
+    enemy1Y = memory.readbyte(tonumber("0x85")) / 256.0
+    enemy2X = memory.readbyte(tonumber("0x72")) / 256.0
+    enemy2Y = memory.readbyte(tonumber("0x86")) / 256.0
+    enemy3X = memory.readbyte(tonumber("0x73")) / 256.0
+    enemy3Y = memory.readbyte(tonumber("0x87")) / 256.0
+    enemy4X = memory.readbyte(tonumber("0x74")) / 256.0
+    enemy4Y = memory.readbyte(tonumber("0x88")) / 256.0
+    enemy5X = memory.readbyte(tonumber("0x75")) / 256.0
+    enemy5Y = memory.readbyte(tonumber("0x89")) / 256.0
+    enemy6X = memory.readbyte(tonumber("0x76")) / 256.0
+    enemy6Y = memory.readbyte(tonumber("0x8A")) / 256.0
+    time_norm = t / 216000
+    -- print(time_norm)
+
+    input = {xPos, yPos, map_x, map_y, health, has_sword, enemy1X, enemy1Y, enemy2X, enemy2Y, enemy3X, enemy3Y, enemy4X, enemy4Y, enemy5X, enemy5Y, enemy6X, enemy6Y, time_norm}
+    -- print(input)
+    return input
 end
 
-generate_random_string(100)
+function sigmoid(val)
+    return 1 / (1 + math.exp(-val))
+end
 
-while not dead do
+function feedforward(inputs)
+    input_matrix = matrix(1, #inputs)
+    for i=1, #inputs do
+        input_matrix[1][i] = inputs[i]
+    end
+
+    layer1 = matrix.replace(matrix.mul(input_matrix, weights1), sigmoid)
+    outputs = matrix.replace(matrix.mul(layer1, weights2), sigmoid)
+
+    return outputs
+end
+
+function backprop(outputs, fitness)
+    error = 2 * (sigmoid(fitness) - 0.5)
+    d_weights2 = matrix(num_hidden, num_outputs)
+    for i=1,#d_weights2 do
+        for j=1,#d_weights2[1] do
+            d_weights2[i][j] = 0.3 * error * outputs[1][j]
+        end
+    end
+
+
+    d_weights1 = matrix(num_inputs, num_hidden)
+    for i=1,#d_weights1 do -- num_inputs
+        for j=1,#d_weights1[1] do -- num_hidden
+            s = 0
+            for k=1,num_hidden do
+                s = s + error * weights1[i][k]
+            end 
+            
+            -- I don't think this math is correct. See page 653 of Artificial Intelligence for Games
+            error2 = layer1[1][i] * (1 - layer1[1][i]) * s
+            d_weights1[i][j] = 0.3 * error2 * layer1[1][i]
+        end
+    end
+
+    weights2 = weights2 + d_weights2
+    weights1 = weights1 + d_weights1
+end
+
+function draw_brain(x, y, weights)
+    h = #weights
+    w = #weights[1]
+    gui.line(x, y, x + w + 2, y)
+    gui.line(x + w + 2, y, x + w + 2, y + h + 2)
+    gui.line(x + w + 2, y + h + 2, x, y + h + 2)
+    gui.line(x, y + h + 2, x, y)
+    avg_col = 0
+    for i=1,h do
+        for j=1,w do
+            col = weights[i][j] * 255
+            avg_col = avg_col + col
+            gui.pixel(x + j + 1, y + i + 1, {col, col, col})
+        end
+    end
+
+    print(avg_col / (w * h))
+end
+
+function regenerate_NN()
+    layer1 = matrix(1, num_hidden)
+    weights1 = matrix.my_random(weights1_shape, 100)
+    weights2 = matrix.my_random(weights2_shape, 100)
+end
+
+-- creating savestate
+save = savestate.object(1)
+savestate.save(save)
+
+last_pos = {0, 0}
+move_timer = 0
+fitness = 0
+
+while true do
 
     -- Print input from player 1
+    game_state = memory.readbyte(tonumber("0x12"))
+    if game_state == 5 then
+        xPos = memory.readbyte(tonumber("0x70"))
+        yPos = memory.readbyte(tonumber("0x84"))
+        if xPos ~= last_pos[1] or yPos ~= last_pos[2] then
+            last_pos = {xPos, yPos}
+            move_timer = 0
+        end
 
-    xPos = memory.readbyte(tonumber("0x70"))
-    yPos = memory.readbyte(tonumber("0x84"))
-    
-    -- gui.text(0, 20, "(" .. xPos .. ", " .. yPos .. ")")
-    
-    dead = get_health() == 0
+        NN_output = feedforward(generate_inputs())
 
-    if dead then
-      --  pressed = not pressed
-        file = io.open("searchstring.txt", "w")
-        file:write(total_string)
-        file:close()
+        max_val = 0
+        curr = 0
+    
+        for i=1,num_outputs do
+            if NN_output[1][i] > max_val then
+                max_val = NN_output[1][i]
+                curr = i
+            end
+        end
+    
+        gui.text(0, 20, "Selected Button: " .. curr)
+    
+        my_input = {
+            a = NN_output[1][1] == max_val,
+            b = NN_output[1][2] == max_val,
+            left = NN_output[1][3] == max_val,
+            right = NN_output[1][4] == max_val,
+            up = NN_output[1][5] == max_val,
+            down = NN_output[1][6] == max_val,
+            start = NN_output[1][7] == max_val,
+            select = NN_output[1][8] == max_val
+        }
+    
+        t = t + 1
+        move_timer = move_timer + 1
+    
+        --[[
+        for i=1,num_outputs do
+            print(i .. ": " .. NN_output[1][i])
+        end
+        print()
+        --]]
+        joypad.write(1, my_input)
+    
+    
+        fitness = fitness + calculateFitness()
+        -- draw_brain(20, 20, weights2)
     end
-
-    curr = string.sub(search_string, frame_index, frame_index)
-    gui.text(0, 20, "Selected Button: " .. curr)
-    
-    my_input = {
-        a = curr == 'a',
-        b = curr == 'b',
-        left = curr == 'l',
-        right = curr == 'r',
-        up = curr == 'u',
-        down = curr == 'd',
-        start = curr == 's' or pressed,
-        select = curr == 'e'
-    }
-
-    frame_index = frame_index + 1
-    if frame_index > string.len(search_string) then
-        frame_index = 1
-        generate_random_string(100)
-    end
-
-    -- print(my_input)
-    joypad.write(1, my_input)
-
     
     emu.frameadvance()
+
+    dead = get_health() == 0
+    if dead or move_timer > 600 or t > 60 * 60 * 60 then
+        backprop(NN_output, fitness)
+        savestate.load(save)
+        print("LOADED")
+        move_timer = 0
+        t = 0
+        fitness = 0
+
+        -- reset states
+        swordState = 0
+        candleState = 0
+        bowState = false
+        arrowState = false
+        ladderState = false
+        powerBraceletState = false
+        raftState = false
+        whistleState = false
+        magicalRodState = false
+        magicBookState = false
+        boomerangState = 0
+        clockState = false
+        foodState = false
+
+        triforcePieces = 0
+        moveHistory = {}
+        screenHistory = {}
+        curHealth = 0
+        move = 0
+        killedEnemies = 0
+    end
 end
