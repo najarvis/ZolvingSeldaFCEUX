@@ -14,14 +14,14 @@ math.randomseed(os.time())
 
 local matrix = require('lua-matrix.lua.matrix')
 
-num_inputs = 20
+num_inputs = 29
 num_hidden = 50
 num_outputs = 8 -- Up, Down, Left, Right, A, B, Select, Start
 weights1_shape = matrix(num_inputs, num_hidden)
 weights2_shape = matrix(num_hidden, num_outputs)
 layer1 = matrix(1, num_hidden)
-weights1 = matrix.my_random(weights1_shape, 100)
-weights2 = matrix.my_random(weights2_shape, 100)
+weights1 = matrix.my_random(weights1_shape, 0.001)
+weights2 = matrix.my_random(weights2_shape, 0.001)
 t = 0
 
 -- Starting states:
@@ -81,16 +81,19 @@ function calculateFitness()
         end
         index = index + 1
     end
+    --[[ 
+    
     if posFound then
         fitness = fitness - 1
     else 
-        fitness = fitness + 2
+        fitness = fitness + 5
         move = move + 1
         if move > 200 then
             move = 1
         end
         moveHistory[move] = {xPos, yPos}
     end
+    --]]
 
     lastMove = {xPos, yPos}
     if health < curHealth then
@@ -224,7 +227,7 @@ function get_health(normalized)
     end
 end
 
-function generate_inputs()
+function generate_inputs(previous)
     has_sword = memory.readbyte(tonumber("0x0657"))
     xPos = memory.readbyte(tonumber("0x70")) / 256.0
     yPos = memory.readbyte(tonumber("0x84")) / 256.0
@@ -243,10 +246,12 @@ function generate_inputs()
     enemy5Y = memory.readbyte(tonumber("0x89")) / 256.0
     enemy6X = memory.readbyte(tonumber("0x76")) / 256.0
     enemy6Y = memory.readbyte(tonumber("0x8A")) / 256.0
+    frame_counter = memory.readbyte(tonumber("0x12")) / 256.0
     time_norm = t / 216000
     -- print(time_norm)
 
-    input = {xPos, yPos, map_x, map_y, health, has_sword, enemy1X, enemy1Y, enemy2X, enemy2Y, enemy3X, enemy3Y, enemy4X, enemy4Y, enemy5X, enemy5Y, enemy6X, enemy6Y, time_norm}
+    input = {xPos, yPos, map_x, map_y, health, has_sword, enemy1X, enemy1Y, enemy2X, enemy2Y, enemy3X, enemy3Y, enemy4X, enemy4Y, enemy5X, enemy5Y, enemy6X, enemy6Y, time_norm, frame_counter,
+             previous[1], previous[2], previous[3], previous[4], previous[5], previous[6], previous[7], previous[8]}
     -- print(input)
     return input
 end
@@ -268,6 +273,7 @@ function feedforward(inputs)
 end
 
 function backprop(outputs, fitness)
+    -- Error term for output layer
     error = 2 * (sigmoid(fitness) - 0.5)
     d_weights2 = matrix(num_hidden, num_outputs)
     for i=1,#d_weights2 do
@@ -276,7 +282,7 @@ function backprop(outputs, fitness)
         end
     end
 
-
+    -- Error term for hidden layer
     d_weights1 = matrix(num_inputs, num_hidden)
     for i=1,#d_weights1 do -- num_inputs
         for j=1,#d_weights1[1] do -- num_hidden
@@ -320,6 +326,14 @@ function regenerate_NN()
     weights2 = matrix.my_random(weights2_shape, 100)
 end
 
+function draw_output(x, y, t)
+    h = 20
+    for i=1, #t do
+        -- print(t[i])
+        gui.rect(x + i * 6, y, x + i * 6 + 4, y - t[i] * h, 'white')
+    end
+end
+
 -- creating savestate
 save = savestate.object(1)
 savestate.save(save)
@@ -327,11 +341,18 @@ savestate.save(save)
 last_pos = {0, 0}
 move_timer = 0
 fitness = 0
+previous_fitness = 0
+previous_outputs = {0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5}
+
+move_counter = 0
+
+emu.speedmode("turbo")
 
 while true do
 
     -- Print input from player 1
     game_state = memory.readbyte(tonumber("0x12"))
+    if game_state == 11 then game_state = 5 end
     if game_state == 5 then
         xPos = memory.readbyte(tonumber("0x70"))
         yPos = memory.readbyte(tonumber("0x84"))
@@ -340,29 +361,55 @@ while true do
             move_timer = 0
         end
 
-        NN_output = feedforward(generate_inputs())
+        if move_counter == 0 then
+            NN_output = feedforward(generate_inputs(previous_outputs))
+            move_counter = math.random(2, 4)
+        else
+            move_counter = move_counter - 1
+        end
+        draw_output(170, 45, NN_output[1])
+
+        if t % 100 == 0 then
+            print(NN_output[1])
+            print()
+        end
 
         max_val = 0
         curr = 0
     
-        for i=1,num_outputs do
+        x = 0
+        -- We don't want the AI to press select (or start at this time)
+        for i=1,num_outputs-2 do
+            previous_outputs[i] = NN_output[1][i]
+            x = x + NN_output[1][i]
+            --[[
             if NN_output[1][i] > max_val then
                 max_val = NN_output[1][i]
                 curr = i
-            end
+            end 
+            --]]
         end
-    
-        gui.text(0, 20, "Selected Button: " .. curr)
+
+        val = math.random() * x
+        base = 0
+        for i=1,num_outputs-2 do
+            if val < base + NN_output[1][i] then
+                curr = i
+                break
+            end
+            base = base + NN_output[1][i]
+        end
+        
     
         my_input = {
-            a = NN_output[1][1] == max_val,
-            b = NN_output[1][2] == max_val,
-            left = NN_output[1][3] == max_val,
-            right = NN_output[1][4] == max_val,
-            up = NN_output[1][5] == max_val,
-            down = NN_output[1][6] == max_val,
-            start = NN_output[1][7] == max_val,
-            select = NN_output[1][8] == max_val
+            a = curr == 1,
+            b = curr == 2,
+            left = curr == 3,
+            right = curr == 4,
+            up = curr == 5,
+            down = curr == 6,
+            start = curr == 7,
+            select = curr == 8
         }
     
         t = t + 1
@@ -378,6 +425,10 @@ while true do
     
     
         fitness = fitness + calculateFitness()
+
+        gui.text(0, 20, "Selected Button: " .. curr)
+        gui.text(0, 30, "Current Fitness: " .. fitness)
+        gui.text(0, 40, "Previous Fitness: " .. previous_fitness)
         -- draw_brain(20, 20, weights2)
     end
     
@@ -385,6 +436,10 @@ while true do
 
     dead = get_health() == 0
     if dead or move_timer > 600 or t > 60 * 60 * 60 then
+        if move_timer > 600 then
+            fitness = fitness - 10
+        end
+        previous_fitness = fitness
         backprop(NN_output, fitness)
         savestate.load(save)
         print("LOADED")
@@ -413,5 +468,7 @@ while true do
         curHealth = 0
         move = 0
         killedEnemies = 0
+
+        --gui.savescreenshot()
     end
 end
